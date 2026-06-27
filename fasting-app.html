@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fast — Fasting & Calorie Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0D1117; --surface: #1C2128; --surface2: #252D38; --surface3: #2D3748;
+    --amber: #E8A838; --amber-dim: rgba(232,168,56,0.15);
+    --sage: #4A7C6F; --sage-dim: rgba(74,124,111,0.2);
+    --cream: #F0EDE6; --muted: #6E7681; --danger: #E05C5C;
+    --blue: #5B8DEF; --blue-dim: rgba(91,141,239,0.15);
+    --green: #3DD68C;
+  }
+  body { background: var(--bg); color: var(--cream); font-family: 'Inter', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 0 0 80px; }
+
+  /* ── HEADER ── */
+  header { width: 100%; max-width: 520px; display: flex; justify-content: space-between; align-items: center; padding: 28px 20px 0; }
+  .logo { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 600; letter-spacing: 0.12em; color: var(--amber); }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .streak-badge { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--surface2); border-radius: 20px; padding: 4px 14px; letter-spacing: 0.06em; }
+  .streak-badge span { color: var(--amber); font-weight: 600; }
+
+  /* ── EXPORT/IMPORT BUTTONS ── */
+  .data-btn { font-size: 11px; font-family: 'Inter', sans-serif; letter-spacing: 0.06em; padding: 5px 11px; border-radius: 8px; border: 1px solid var(--surface2); background: var(--surface); color: var(--muted); cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+  .data-btn:hover { border-color: var(--amber); color: var(--cream); }
+  .data-btn.import { border-color: var(--surface3); }
+  .data-actions { display: flex; gap: 6px; align-items: center; }
+
+  /* ── NOTIFICATION BANNER ── */
+  .notif-banner { display: none; position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: var(--sage); color: #fff; font-size: 14px; font-weight: 600; padding: 14px 28px; border-radius: 12px; z-index: 999; box-shadow: 0 8px 32px rgba(0,0,0,0.4); text-align: center; max-width: 320px; letter-spacing: 0.02em; animation: slideDown 0.3s ease; }
+  @keyframes slideDown { from { opacity:0; transform: translateX(-50%) translateY(-12px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+  .notif-banner.show { display: block; }
+
+  /* ── ALERT PERMISSION ROW ── */
+  .alert-row { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--surface2); border-radius: 10px; padding: 11px 16px; margin-bottom: 16px; width: 100%; }
+  .alert-row-label { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; flex: 1; }
+  .alert-toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+  .alert-toggle input { opacity: 0; width: 0; height: 0; }
+  .alert-slider { position: absolute; inset: 0; background: var(--surface2); border-radius: 22px; cursor: pointer; transition: background 0.25s; border: 1px solid var(--surface3); }
+  .alert-slider:before { content:''; position:absolute; width:16px; height:16px; left:2px; top:2px; background:#fff; border-radius:50%; transition:transform 0.25s; }
+  .alert-toggle input:checked + .alert-slider { background: var(--sage); border-color: var(--sage); }
+  .alert-toggle input:checked + .alert-slider:before { transform: translateX(18px); }
+  .alert-status { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+
+  /* ── TABS ── */
+  .tab-bar { display: flex; background: var(--surface); border: 1px solid var(--surface2); border-radius: 12px; padding: 4px; margin: 20px 20px 0; width: calc(100% - 40px); max-width: 480px; }
+  .tab-btn { flex: 1; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; padding: 8px 0; border: none; background: transparent; color: var(--muted); border-radius: 8px; cursor: pointer; transition: all 0.2s; letter-spacing: 0.02em; }
+  .tab-btn.active { background: var(--surface2); color: var(--cream); }
+  .tab-panel { width: 100%; max-width: 520px; padding: 24px 20px 0; display: none; }
+  .tab-panel.active { display: flex; flex-direction: column; align-items: center; }
+
+  /* ── RING ── */
+  .ring-container { position: relative; width: 260px; height: 260px; margin: 0 auto 24px; }
+  .ring-svg { width: 260px; height: 260px; transform: rotate(-90deg); }
+  .ring-track { fill: none; stroke: var(--surface2); stroke-width: 10; }
+  .ring-fill { fill: none; stroke: var(--amber); stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke 0.5s ease; filter: drop-shadow(0 0 8px rgba(232,168,56,0.5)); }
+  .ring-fill.complete { stroke: var(--sage); filter: drop-shadow(0 0 12px rgba(74,124,111,0.7)); }
+  .ring-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; pointer-events: none; }
+  .timer-display { font-family: 'JetBrains Mono', monospace; font-size: 42px; font-weight: 300; letter-spacing: -0.02em; line-height: 1; color: var(--cream); }
+  .timer-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
+  .pct-display { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--amber); margin-top: 6px; letter-spacing: 0.06em; transition: color 0.5s; }
+  .pct-display.complete { color: var(--sage); }
+
+  /* ── GOAL BUTTONS ── */
+  .goal-row { display: flex; gap: 8px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap; width: 100%; }
+  .goal-btn { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.08em; padding: 6px 16px; border-radius: 20px; border: 1px solid var(--surface2); background: var(--surface); color: var(--muted); cursor: pointer; transition: all 0.2s; }
+  .goal-btn:hover { border-color: var(--amber); color: var(--cream); }
+  .goal-btn.active { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+
+  /* ── BACKDATE ROW ── */
+  .backdate-row { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--surface2); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; width: 100%; }
+  .backdate-label { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; white-space: nowrap; }
+  .backdate-input { flex: 1; background: var(--surface2); border: 1px solid var(--surface3); border-radius: 6px; color: var(--cream); font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 6px 10px; outline: none; color-scheme: dark; }
+  .backdate-input:focus { border-color: var(--amber); }
+  .backdate-clear { font-size: 11px; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0; letter-spacing: 0.06em; white-space: nowrap; }
+  .backdate-clear:hover { color: var(--cream); }
+
+  /* ── STATS BAR ── */
+  .stats-bar { display: flex; gap: 20px; justify-content: center; margin-bottom: 24px; }
+  .stat { text-align: center; }
+  .stat-val { font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 600; color: var(--cream); }
+  .stat-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+  .stat-divider { width: 1px; background: var(--surface2); align-self: stretch; }
+
+  /* ── CTA ── */
+  .cta-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 32px; }
+  .cta-btn { font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 600; letter-spacing: 0.04em; padding: 13px 52px; border-radius: 40px; border: none; cursor: pointer; transition: all 0.25s; }
+  .cta-btn.start { background: var(--amber); color: #0D1117; }
+  .cta-btn.start:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .cta-btn.stop { background: transparent; color: var(--danger); border: 1.5px solid var(--danger); }
+  .cta-btn.stop:hover { background: rgba(224,92,92,0.1); }
+  .start-time-note { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em; }
+
+  /* ── SECTION ── */
+  .section-block { width: 100%; margin-bottom: 8px; }
+  .section-title { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--surface2); }
+
+  /* ── HISTORY ── */
+  .history-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+  .history-item { background: var(--surface); border: 1px solid var(--surface2); border-radius: 10px; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; }
+  .history-date { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; margin-bottom: 4px; }
+  .history-duration { font-family: 'JetBrains Mono', monospace; font-size: 15px; color: var(--cream); font-weight: 600; }
+  .history-bar-wrap { width: 90px; height: 4px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+  .history-bar { height: 100%; border-radius: 4px; background: var(--amber); }
+  .history-bar.complete { background: var(--sage); }
+  .history-pct { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); text-align: right; margin-top: 4px; }
+  .empty-state { text-align: center; padding: 28px; color: var(--muted); font-size: 13px; letter-spacing: 0.04em; width: 100%; }
+
+  /* ── CALORIE TAB ── */
+  .cal-goal-row { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--surface2); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; width: 100%; }
+  .cal-goal-label { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; flex: 1; }
+  .cal-goal-input { width: 80px; background: var(--surface2); border: 1px solid var(--surface3); border-radius: 6px; color: var(--cream); font-family: 'JetBrains Mono', monospace; font-size: 14px; padding: 6px 10px; outline: none; text-align: right; color-scheme: dark; }
+  .cal-goal-input:focus { border-color: var(--amber); }
+  .cal-goal-unit { font-size: 12px; color: var(--muted); }
+  .cal-ring-wrap { position: relative; width: 200px; height: 200px; margin: 0 auto 24px; }
+  .cal-ring-svg { width: 200px; height: 200px; transform: rotate(-90deg); }
+  .cal-ring-track { fill: none; stroke: var(--surface2); stroke-width: 10; }
+  .cal-ring-fill { fill: none; stroke: var(--blue); stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 0.5s ease, stroke 0.3s; filter: drop-shadow(0 0 8px rgba(91,141,239,0.4)); }
+  .cal-ring-fill.over { stroke: var(--danger); filter: drop-shadow(0 0 8px rgba(224,92,92,0.5)); }
+  .cal-ring-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; pointer-events: none; }
+  .cal-consumed { font-family: 'JetBrains Mono', monospace; font-size: 34px; font-weight: 300; color: var(--cream); line-height: 1; }
+  .cal-consumed-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+  .cal-remaining { font-family: 'JetBrains Mono', monospace; font-size: 12px; margin-top: 5px; color: var(--blue); transition: color 0.3s; }
+  .cal-remaining.over { color: var(--danger); }
+  .macro-row { display: flex; gap: 12px; width: 100%; margin-bottom: 20px; }
+  .macro-card { flex: 1; background: var(--surface); border: 1px solid var(--surface2); border-radius: 10px; padding: 12px; text-align: center; }
+  .macro-val { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 600; color: var(--cream); }
+  .macro-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
+  .macro-bar-wrap { height: 3px; background: var(--surface2); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .macro-bar { height: 100%; border-radius: 3px; transition: width 0.4s; }
+  .macro-bar.protein { background: #7B8EEF; }
+  .macro-bar.carbs { background: #E8A838; }
+  .macro-bar.fat { background: #4A7C6F; }
+  .add-food-card { background: var(--surface); border: 1px solid var(--surface2); border-radius: 12px; padding: 16px; width: 100%; margin-bottom: 20px; }
+  .add-food-title { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
+  .food-field-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .food-input { flex: 1; background: var(--surface2); border: 1px solid var(--surface3); border-radius: 6px; color: var(--cream); font-family: 'Inter', sans-serif; font-size: 13px; padding: 8px 10px; outline: none; color-scheme: dark; }
+  .food-input:focus { border-color: var(--blue); }
+  .food-input.num { width: 72px; flex: none; text-align: right; font-family: 'JetBrains Mono', monospace; }
+  .food-input::placeholder { color: var(--muted); }
+  .macro-fields { display: flex; gap: 8px; }
+  .macro-fields .food-input.num { flex: 1; }
+  .add-food-btn { width: 100%; margin-top: 8px; padding: 9px; background: var(--blue); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: filter 0.2s; letter-spacing: 0.04em; }
+  .add-food-btn:hover { filter: brightness(1.12); }
+  .food-log-list { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+  .food-item { background: var(--surface); border: 1px solid var(--surface2); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; }
+  .food-name { font-size: 14px; color: var(--cream); font-weight: 500; }
+  .food-macros { font-size: 11px; color: var(--muted); margin-top: 3px; font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em; }
+  .food-cal { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 600; color: var(--blue); white-space: nowrap; margin-left: 12px; }
+  .food-delete { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 18px; padding: 0 0 0 10px; line-height: 1; transition: color 0.2s; }
+  .food-delete:hover { color: var(--danger); }
+  .cal-date-row { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 20px; }
+  .cal-date-nav { background: var(--surface); border: 1px solid var(--surface2); border-radius: 6px; padding: 6px 12px; font-size: 13px; color: var(--muted); cursor: pointer; transition: all 0.2s; }
+  .cal-date-nav:hover { border-color: var(--blue); color: var(--cream); }
+  .cal-date-label { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--cream); letter-spacing: 0.06em; }
+
+  /* ── IMPORT HIDDEN INPUT ── */
+  #importFileInput { display: none; }
+
+  /* ── TOAST ── */
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--surface3); color: var(--cream); font-size: 13px; padding: 10px 20px; border-radius: 8px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 1000; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) { .ring-fill, .cal-ring-fill { transition: none; } }
+</style>
+</head>
+<body>
+
+<!-- NOTIFICATION BANNER -->
+<div class="notif-banner" id="notifBanner">🌿 Fast complete! Well done!</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<header>
+  <div class="logo">FAST</div>
+  <div class="header-right">
+    <div class="data-actions">
+      <button class="data-btn" id="exportBtn">↓ Export</button>
+      <button class="data-btn import" id="importBtn">↑ Import</button>
+      <input type="file" id="importFileInput" accept=".json">
+    </div>
+    <div class="streak-badge">streak <span id="streakCount">0</span>d</div>
+  </div>
+</header>
+
+<div class="tab-bar">
+  <button class="tab-btn active" id="tabFast">⏱ Fasting</button>
+  <button class="tab-btn" id="tabCal">🥗 Calories</button>
+</div>
+
+<!-- ══════════════ FASTING TAB ══════════════ -->
+<div class="tab-panel active" id="panelFast">
+
+  <div class="ring-container">
+    <svg class="ring-svg" viewBox="0 0 260 260">
+      <circle class="ring-track" cx="130" cy="130" r="115"/>
+      <circle class="ring-fill" id="ringFill" cx="130" cy="130" r="115"
+        stroke-dasharray="722.6" stroke-dashoffset="722.6"/>
+    </svg>
+    <div class="ring-center">
+      <div class="timer-display" id="timerDisplay">00:00:00</div>
+      <div class="timer-label" id="timerLabel">ready to fast</div>
+      <div class="pct-display" id="pctDisplay">0%</div>
+    </div>
+  </div>
+
+  <div class="goal-row" id="goalRow">
+    <button class="goal-btn active" data-hours="12">12h</button>
+    <button class="goal-btn" data-hours="14">14h</button>
+    <button class="goal-btn" data-hours="16">16h</button>
+    <button class="goal-btn" data-hours="18">18h</button>
+    <button class="goal-btn" data-hours="20">20h</button>
+    <button class="goal-btn" data-hours="24">24h</button>
+  </div>
+
+  <!-- BACKDATE -->
+  <div class="backdate-row" id="backdateRow">
+    <span class="backdate-label">Start time</span>
+    <input type="datetime-local" class="backdate-input" id="backdateInput">
+    <button class="backdate-clear" id="backdateClear">Now</button>
+  </div>
+
+  <!-- ALERT TOGGLE -->
+  <div class="alert-row">
+    <span class="alert-row-label">Alert when fast is complete</span>
+    <span class="alert-status" id="alertStatus">Off</span>
+    <label class="alert-toggle">
+      <input type="checkbox" id="alertToggle">
+      <span class="alert-slider"></span>
+    </label>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat"><div class="stat-val" id="avgStat">—</div><div class="stat-label">avg fast</div></div>
+    <div class="stat-divider"></div>
+    <div class="stat"><div class="stat-val" id="totalStat">0</div><div class="stat-label">completed</div></div>
+    <div class="stat-divider"></div>
+    <div class="stat"><div class="stat-val" id="bestStat">—</div><div class="stat-label">longest</div></div>
+  </div>
+
+  <div class="cta-wrap">
+    <button class="cta-btn start" id="ctaBtn">Start Fast</button>
+    <div class="start-time-note" id="startNote"></div>
+  </div>
+
+  <div class="section-block">
+    <div class="section-title">Past Fasts</div>
+    <div class="history-list" id="historyList">
+      <div class="empty-state">No fasts yet. Start your first one above.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════ CALORIES TAB ══════════════ -->
+<div class="tab-panel" id="panelCal">
+
+  <div class="cal-date-row">
+    <button class="cal-date-nav" id="calPrev">◀</button>
+    <div class="cal-date-label" id="calDateLabel">Today</div>
+    <button class="cal-date-nav" id="calNext">▶</button>
+  </div>
+
+  <div class="cal-goal-row">
+    <span class="cal-goal-label">Daily calorie goal</span>
+    <input type="number" class="cal-goal-input" id="calGoalInput" value="2000" min="500" max="5000">
+    <span class="cal-goal-unit">kcal</span>
+  </div>
+
+  <div class="cal-ring-wrap">
+    <svg class="cal-ring-svg" viewBox="0 0 200 200">
+      <circle class="cal-ring-track" cx="100" cy="100" r="88"/>
+      <circle class="cal-ring-fill" id="calRingFill" cx="100" cy="100" r="88"
+        stroke-dasharray="552.9" stroke-dashoffset="552.9"/>
+    </svg>
+    <div class="cal-ring-center">
+      <div class="cal-consumed" id="calConsumed">0</div>
+      <div class="cal-consumed-label">kcal eaten</div>
+      <div class="cal-remaining" id="calRemaining">2000 left</div>
+    </div>
+  </div>
+
+  <div class="macro-row">
+    <div class="macro-card">
+      <div class="macro-val" id="macroProtein">0g</div>
+      <div class="macro-label">Protein</div>
+      <div class="macro-bar-wrap"><div class="macro-bar protein" id="barProtein" style="width:0%"></div></div>
+    </div>
+    <div class="macro-card">
+      <div class="macro-val" id="macroCarbs">0g</div>
+      <div class="macro-label">Carbs</div>
+      <div class="macro-bar-wrap"><div class="macro-bar carbs" id="barCarbs" style="width:0%"></div></div>
+    </div>
+    <div class="macro-card">
+      <div class="macro-val" id="macroFat">0g</div>
+      <div class="macro-label">Fat</div>
+      <div class="macro-bar-wrap"><div class="macro-bar fat" id="barFat" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="add-food-card">
+    <div class="add-food-title">Add food</div>
+    <div class="food-field-row">
+      <input type="text" class="food-input" id="foodName" placeholder="Food or meal name">
+      <input type="number" class="food-input num" id="foodCal" placeholder="kcal" min="0">
+    </div>
+    <div class="macro-fields">
+      <input type="number" class="food-input num" id="foodProtein" placeholder="P (g)" min="0">
+      <input type="number" class="food-input num" id="foodCarbs" placeholder="C (g)" min="0">
+      <input type="number" class="food-input num" id="foodFat" placeholder="F (g)" min="0">
+    </div>
+    <button class="add-food-btn" id="addFoodBtn">Add to Log</button>
+  </div>
+
+  <div class="section-block">
+    <div class="section-title">Today's Log</div>
+    <div class="food-log-list" id="foodLogList">
+      <div class="empty-state">No entries yet. Add your first meal above.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+const SK = 'fast_app_v3';
+
+function defaultState() {
+  return { goalHours: 12, startedAt: null, history: [], streak: 0, lastFastDate: null,
+           calGoal: 2000, foodLogs: {}, alertEnabled: false };
+}
+function loadState() {
+  try { const r = localStorage.getItem(SK); return r ? {...defaultState(), ...JSON.parse(r)} : defaultState(); }
+  catch { return defaultState(); }
+}
+function saveState() { localStorage.setItem(SK, JSON.stringify(state)); }
+
+let state = loadState();
+let tickInterval = null;
+let calViewDate = todayKey();
+let alertFired = false; // prevent repeat firing within same fast
+
+// ══════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════
+function todayKey() { return new Date().toISOString().slice(0,10); }
+function dateKey(d) { return d.toISOString().slice(0,10); }
+function formatHMS(ms) {
+  const s = Math.floor(ms/1000);
+  return [Math.floor(s/3600),Math.floor((s%3600)/60),s%60].map(v=>String(v).padStart(2,'0')).join(':');
+}
+function formatH(ms) { const h=ms/3600000; return h>=1?`${h.toFixed(1)}h`:`${Math.round(ms/60000)}m`; }
+function formatDate(ts) { return new Date(ts).toLocaleDateString('en-ZA',{day:'numeric',month:'short',year:'numeric'}); }
+function tsToLocal(ts) {
+  const d=new Date(ts), pad=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function showToast(msg, duration=2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+// ══════════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════════
+document.getElementById('tabFast').addEventListener('click', () => switchTab('fast'));
+document.getElementById('tabCal').addEventListener('click',  () => switchTab('cal'));
+function switchTab(t) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.id==='tab'+cap(t)));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id==='panel'+cap(t)));
+}
+function cap(s) { return s.charAt(0).toUpperCase()+s.slice(1); }
+
+// ══════════════════════════════════════════════
+//  NOTIFICATIONS / VIBRATION / SOUND
+// ══════════════════════════════════════════════
+const alertToggle = document.getElementById('alertToggle');
+const alertStatus = document.getElementById('alertStatus');
+
+alertToggle.checked = state.alertEnabled;
+alertStatus.textContent = state.alertEnabled ? 'On' : 'Off';
+
+alertToggle.addEventListener('change', async () => {
+  if (alertToggle.checked) {
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') {
+        alertToggle.checked = false;
+        showToast('Notification permission denied. Alerts will use sound + vibration only.');
+        state.alertEnabled = true; // still use sound/vibrate
+        saveState(); updateAlertStatus(); return;
+      }
+    }
+    state.alertEnabled = true;
+    showToast('Alerts on — you\'ll be notified when your fast is complete.');
+  } else {
+    state.alertEnabled = false;
+  }
+  saveState(); updateAlertStatus();
+});
+
+function updateAlertStatus() {
+  alertStatus.textContent = state.alertEnabled ? 'On' : 'Off';
+  alertToggle.checked = state.alertEnabled;
+}
+
+function fireCompletionAlert() {
+  if (alertFired) return;
+  alertFired = true;
+
+  // 1. In-app banner
+  const banner = document.getElementById('notifBanner');
+  banner.classList.add('show');
+  setTimeout(() => banner.classList.remove('show'), 6000);
+
+  // 2. Vibration (works on Android Chrome; silent on iOS/desktop)
+  if ('vibrate' in navigator) {
+    navigator.vibrate([400, 150, 400, 150, 600]);
+  }
+
+  // 3. Web Audio beep (works everywhere, no file needed)
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const playBeep = (freq, startTime, dur) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.4, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + dur);
+      osc.start(startTime); osc.stop(startTime + dur);
+    };
+    const now = ctx.currentTime;
+    playBeep(523, now,       0.25); // C5
+    playBeep(659, now+0.3,   0.25); // E5
+    playBeep(784, now+0.6,   0.4);  // G5
+    playBeep(1046,now+1.1,   0.6);  // C6
+  } catch(e) {}
+
+  // 4. Browser notification (if permission granted)
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('🌿 Fast Complete!', {
+      body: `You completed your ${state.goalHours}h fast. Amazing work!`,
+      icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🌿</text></svg>'
+    });
+  }
+}
+
+// ══════════════════════════════════════════════
+//  FASTING
+// ══════════════════════════════════════════════
+const CIRC = 2 * Math.PI * 115;
+
+const ringFill      = document.getElementById('ringFill');
+const timerDisplay  = document.getElementById('timerDisplay');
+const timerLabel    = document.getElementById('timerLabel');
+const pctDisplay    = document.getElementById('pctDisplay');
+const ctaBtn        = document.getElementById('ctaBtn');
+const startNote     = document.getElementById('startNote');
+const historyList   = document.getElementById('historyList');
+const streakCount   = document.getElementById('streakCount');
+const avgStat       = document.getElementById('avgStat');
+const totalStat     = document.getElementById('totalStat');
+const bestStat      = document.getElementById('bestStat');
+const goalBtns      = document.querySelectorAll('.goal-btn');
+const backdateInput = document.getElementById('backdateInput');
+const backdateClear = document.getElementById('backdateClear');
+const backdateRow   = document.getElementById('backdateRow');
+
+function resetBackdate() { backdateInput.value = tsToLocal(Date.now()); }
+resetBackdate();
+backdateClear.addEventListener('click', resetBackdate);
+setInterval(() => { backdateInput.max = tsToLocal(Date.now()+1000); }, 10000);
+backdateInput.max = tsToLocal(Date.now()+1000);
+
+function updateRing(pct) {
+  const offset = CIRC * (1 - Math.min(pct,1));
+  ringFill.style.strokeDashoffset = offset;
+  ringFill.classList.toggle('complete', pct >= 1);
+  pctDisplay.classList.toggle('complete', pct >= 1);
+}
+
+function tick() {
+  if (!state.startedAt) return;
+  const elapsed = Date.now() - state.startedAt;
+  const goal = state.goalHours * 3600000;
+  const pct = elapsed / goal;
+  timerDisplay.textContent = formatHMS(elapsed);
+  pctDisplay.textContent = Math.min(Math.round(pct*100),100) + '%';
+  updateRing(pct);
+  if (pct >= 1) {
+    timerLabel.textContent = 'goal reached 🌿';
+    if (state.alertEnabled) fireCompletionAlert();
+  } else {
+    alertFired = false; // reset if somehow we go back under (shouldn't happen but safe)
+    const rem = goal - elapsed;
+    timerLabel.textContent = `${Math.floor(rem/3600000)}h ${Math.floor((rem%3600000)/60000)}m remaining`;
+  }
+}
+
+function lockUI() {
+  backdateRow.style.opacity = '0.4'; backdateRow.style.pointerEvents = 'none';
+  setGoalBtnsDisabled(true);
+}
+function unlockUI() {
+  backdateRow.style.opacity = ''; backdateRow.style.pointerEvents = '';
+  setGoalBtnsDisabled(false);
+}
+
+function startFast() {
+  const inputVal = backdateInput.value;
+  const chosen = inputVal ? new Date(inputVal).getTime() : Date.now();
+  state.startedAt = Math.min(chosen, Date.now());
+  alertFired = false;
+  saveState();
+  ctaBtn.textContent = 'End Fast'; ctaBtn.className = 'cta-btn stop';
+  const sd = new Date(state.startedAt);
+  startNote.textContent = `started ${sd.toLocaleDateString('en-ZA',{day:'numeric',month:'short'})} ${sd.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'})}`;
+  lockUI();
+  tickInterval = setInterval(tick, 1000); tick();
+}
+
+function stopFast() {
+  const elapsed = Date.now() - state.startedAt;
+  const goal = state.goalHours * 3600000;
+  const pct = elapsed / goal;
+
+  state.history.unshift({ startedAt: state.startedAt, duration: elapsed, goal: state.goalHours, pct: Math.min(pct,1) });
+  if (state.history.length > 30) state.history.pop();
+
+  const today = todayKey();
+  const yesterday = dateKey(new Date(Date.now()-86400000));
+  if (pct >= 1) {
+    if (state.lastFastDate === yesterday) state.streak += 1;
+    else if (state.lastFastDate !== today) state.streak = 1;
+    state.lastFastDate = today;
+  }
+
+  state.startedAt = null; saveState();
+  clearInterval(tickInterval); tickInterval = null; alertFired = false;
+
+  ctaBtn.textContent = 'Start Fast'; ctaBtn.className = 'cta-btn start';
+  startNote.textContent = '';
+  timerLabel.textContent = 'ready to fast';
+  timerDisplay.textContent = '00:00:00';
+  pctDisplay.textContent = '0%';
+  updateRing(0); unlockUI(); resetBackdate();
+  renderHistory(); renderStats();
+}
+
+ctaBtn.addEventListener('click', () => { state.startedAt ? stopFast() : startFast(); });
+
+goalBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (state.startedAt) return;
+    goalBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.goalHours = parseInt(btn.dataset.hours); saveState();
+  });
+  btn.classList.toggle('active', parseInt(btn.dataset.hours) === state.goalHours);
+});
+
+function setGoalBtnsDisabled(d) {
+  goalBtns.forEach(b => { b.style.opacity=d?'0.4':'1'; b.style.pointerEvents=d?'none':''; });
+}
+
+function renderHistory() {
+  streakCount.textContent = state.streak;
+  if (!state.history.length) {
+    historyList.innerHTML = '<div class="empty-state">No fasts yet. Start your first one above.</div>'; return;
+  }
+  historyList.innerHTML = state.history.map(h => {
+    const p = Math.round(h.pct*100);
+    return `<div class="history-item">
+      <div>
+        <div class="history-date">${formatDate(h.startedAt)} &middot; ${h.goal}h goal</div>
+        <div class="history-duration">${formatH(h.duration)}</div>
+      </div>
+      <div>
+        <div class="history-bar-wrap"><div class="history-bar${h.pct>=1?' complete':''}" style="width:${p}%"></div></div>
+        <div class="history-pct">${p}%</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderStats() {
+  const h = state.history; if (!h.length) return;
+  avgStat.textContent   = formatH(h.reduce((a,b)=>a+b.duration,0)/h.length);
+  totalStat.textContent = h.filter(x=>x.pct>=1).length;
+  bestStat.textContent  = formatH(Math.max(...h.map(x=>x.duration)));
+}
+
+if (state.startedAt) {
+  ctaBtn.textContent = 'End Fast'; ctaBtn.className = 'cta-btn stop';
+  const sd = new Date(state.startedAt);
+  startNote.textContent = `started ${sd.toLocaleDateString('en-ZA',{day:'numeric',month:'short'})} ${sd.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'})}`;
+  lockUI();
+  tickInterval = setInterval(tick, 1000); tick();
+}
+renderHistory(); renderStats(); updateAlertStatus();
+
+// ══════════════════════════════════════════════
+//  EXPORT / IMPORT
+// ══════════════════════════════════════════════
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `fast-data-${date}.json`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('Data exported successfully.');
+});
+
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFileInput').click();
+});
+
+document.getElementById('importFileInput').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      // Validate it looks like our data
+      if (typeof imported.goalHours === 'undefined' && typeof imported.history === 'undefined') {
+        showToast('Invalid file — not a FAST export.'); return;
+      }
+      state = {...defaultState(), ...imported};
+      saveState();
+      // Re-render everything
+      renderHistory(); renderStats(); updateAlertStatus();
+      calGoalInput.value = state.calGoal;
+      renderCalories();
+      // Restore mid-fast if applicable
+      if (state.startedAt) {
+        ctaBtn.textContent = 'End Fast'; ctaBtn.className = 'cta-btn stop';
+        const sd = new Date(state.startedAt);
+        startNote.textContent = `started ${sd.toLocaleDateString('en-ZA',{day:'numeric',month:'short'})} ${sd.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'})}`;
+        lockUI();
+        if (!tickInterval) { tickInterval = setInterval(tick, 1000); tick(); }
+      } else {
+        ctaBtn.textContent = 'Start Fast'; ctaBtn.className = 'cta-btn start';
+        startNote.textContent = ''; unlockUI();
+        clearInterval(tickInterval); tickInterval = null;
+        timerDisplay.textContent = '00:00:00'; pctDisplay.textContent = '0%';
+        timerLabel.textContent = 'ready to fast'; updateRing(0);
+      }
+      goalBtns.forEach(b => b.classList.toggle('active', parseInt(b.dataset.hours)===state.goalHours));
+      showToast('Data imported successfully.');
+    } catch(err) {
+      showToast('Could not read file — check it is a valid FAST export.');
+    }
+    e.target.value = ''; // allow re-import of same file
+  };
+  reader.readAsText(file);
+});
+
+// ══════════════════════════════════════════════
+//  CALORIES
+// ══════════════════════════════════════════════
+const CAL_CIRC = 2 * Math.PI * 88;
+
+const calRingFill  = document.getElementById('calRingFill');
+const calConsumed  = document.getElementById('calConsumed');
+const calRemaining = document.getElementById('calRemaining');
+const calGoalInput = document.getElementById('calGoalInput');
+const macroProtein = document.getElementById('macroProtein');
+const macroCarbs   = document.getElementById('macroCarbs');
+const macroFat     = document.getElementById('macroFat');
+const barProtein   = document.getElementById('barProtein');
+const barCarbs     = document.getElementById('barCarbs');
+const barFat       = document.getElementById('barFat');
+const foodLogList  = document.getElementById('foodLogList');
+const calDateLabel = document.getElementById('calDateLabel');
+const foodNameI    = document.getElementById('foodName');
+const foodCalI     = document.getElementById('foodCal');
+const foodProteinI = document.getElementById('foodProtein');
+const foodCarbsI   = document.getElementById('foodCarbs');
+const foodFatI     = document.getElementById('foodFat');
+
+calGoalInput.value = state.calGoal;
+calGoalInput.addEventListener('change', () => {
+  state.calGoal = Math.max(500, parseInt(calGoalInput.value)||2000);
+  calGoalInput.value = state.calGoal; saveState(); renderCalories();
+});
+
+document.getElementById('calPrev').addEventListener('click', () => {
+  const d = new Date(calViewDate); d.setDate(d.getDate()-1); calViewDate = dateKey(d); renderCalories();
+});
+document.getElementById('calNext').addEventListener('click', () => {
+  const d = new Date(calViewDate); d.setDate(d.getDate()+1);
+  const next = dateKey(d);
+  if (next <= todayKey()) { calViewDate = next; renderCalories(); }
+});
+
+function calDateDisplay(dk) {
+  const today = todayKey(), yesterday = dateKey(new Date(Date.now()-86400000));
+  if (dk === today) return 'Today';
+  if (dk === yesterday) return 'Yesterday';
+  return new Date(dk).toLocaleDateString('en-ZA',{day:'numeric',month:'short',year:'numeric'});
+}
+
+function getDayLog() { return state.foodLogs[calViewDate] || []; }
+
+function renderCalories() {
+  calDateLabel.textContent = calDateDisplay(calViewDate);
+  document.getElementById('calNext').style.opacity = calViewDate >= todayKey() ? '0.3' : '1';
+  document.getElementById('calNext').style.pointerEvents = calViewDate >= todayKey() ? 'none' : '';
+
+  const log = getDayLog();
+  const totalCal  = log.reduce((a,f)=>a+(f.cal||0),0);
+  const totalProt = log.reduce((a,f)=>a+(f.protein||0),0);
+  const totalCarb = log.reduce((a,f)=>a+(f.carbs||0),0);
+  const totalFat  = log.reduce((a,f)=>a+(f.fat||0),0);
+  const goal = state.calGoal, pct = totalCal/goal, over = totalCal > goal;
+
+  calRingFill.style.strokeDashoffset = CAL_CIRC * (1 - Math.min(pct,1));
+  calRingFill.classList.toggle('over', over);
+  calConsumed.textContent = totalCal;
+  calRemaining.textContent = over ? `${totalCal-goal} over` : `${goal-totalCal} left`;
+  calRemaining.classList.toggle('over', over);
+
+  macroProtein.textContent = totalProt+'g';
+  macroCarbs.textContent   = totalCarb+'g';
+  macroFat.textContent     = totalFat+'g';
+  barProtein.style.width = Math.min(totalProt/150*100,100)+'%';
+  barCarbs.style.width   = Math.min(totalCarb/250*100,100)+'%';
+  barFat.style.width     = Math.min(totalFat/80*100,100)+'%';
+
+  if (!log.length) {
+    foodLogList.innerHTML = '<div class="empty-state">No entries yet. Add your first meal above.</div>'; return;
+  }
+  foodLogList.innerHTML = log.map((f,i) => `
+    <div class="food-item">
+      <div style="flex:1;min-width:0;">
+        <div class="food-name">${f.name}</div>
+        <div class="food-macros">P ${f.protein||0}g &middot; C ${f.carbs||0}g &middot; F ${f.fat||0}g</div>
+      </div>
+      <div class="food-cal">${f.cal} kcal</div>
+      <button class="food-delete" data-idx="${i}" title="Remove">×</button>
+    </div>`).join('');
+
+  foodLogList.querySelectorAll('.food-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.foodLogs[calViewDate].splice(parseInt(btn.dataset.idx),1);
+      saveState(); renderCalories();
+    });
+  });
+}
+
+document.getElementById('addFoodBtn').addEventListener('click', () => {
+  const name = foodNameI.value.trim(); if (!name) { foodNameI.focus(); return; }
+  if (!state.foodLogs[calViewDate]) state.foodLogs[calViewDate] = [];
+  state.foodLogs[calViewDate].push({
+    name, cal: parseFloat(foodCalI.value)||0,
+    protein: parseFloat(foodProteinI.value)||0,
+    carbs:   parseFloat(foodCarbsI.value)||0,
+    fat:     parseFloat(foodFatI.value)||0,
+    ts: Date.now()
+  });
+  saveState();
+  foodNameI.value=''; foodCalI.value=''; foodProteinI.value=''; foodCarbsI.value=''; foodFatI.value='';
+  renderCalories();
+});
+
+foodNameI.addEventListener('keydown', e => { if (e.key==='Enter') document.getElementById('addFoodBtn').click(); });
+
+renderCalories();
+</script>
+</body>
+</html>
